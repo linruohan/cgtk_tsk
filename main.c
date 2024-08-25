@@ -19,7 +19,7 @@ typedef struct _TExprItem {
 } TExprItem;
 
 // 操作数特化的构造函数
-TExprItem *t_expr_item_new_double(double value) {
+TExprItem *t_expr_item_new_double(const double value) {
     TExprItem *item = g_malloc0(sizeof(TExprItem));
     item->value = value;
     return item;
@@ -34,7 +34,7 @@ TExprItem *t_expr_item_new_pointer(const char *op) {
 }
 
 
-TExprItem *t_expr_item_new(GType type, ...) {
+TExprItem *t_expr_item_new(const GType type, ...) {
     va_list args;
     va_start(args, type);
     TExprItem *item = nullptr;
@@ -59,7 +59,7 @@ void t_expr_item_free(TExprItem *item) {
 };
 
 //判断字符是否为操作符
-bool comm_is_operator(char ch) {
+bool comm_is_operator(const char ch) {
     return ch == '+' || ch == '-' || ch == '*' || ch == '/';
 }
 
@@ -77,9 +77,9 @@ int common_precedence(const char ch) {
     }
 }
 
-static GScannerConfig *_scanner_config_new() {
-    static const char def_skip_characters[] = " \t\n\r\f";
-    static const char def_identifier_first[] = "+-*/()";
+GScannerConfig *_scanner_config_new() {
+    static constexpr char def_skip_characters[] = " \t\n\r\f";
+    static constexpr char def_identifier_first[] = "+-*/()";
     GScannerConfig *config = g_malloc0(sizeof(GScannerConfig));
     config->cset_skip_characters = g_strdup(def_skip_characters); //跳过的特殊字符
     config->cset_identifier_first = g_strdup(def_identifier_first); //标识符的第一个字符
@@ -91,12 +91,12 @@ static GScannerConfig *_scanner_config_new() {
     return config;
 };
 
-GScannerConfig *_scanner_config_free(GScannerConfig *config) {
+void _scanner_config_free(GScannerConfig *config) {
     g_free(config->cset_skip_characters);
     g_free(config->cset_identifier_first);
     g_free(config);
 };
-//转换后缀表达式
+//将算术表达式从计算机友好的后缀表示法转换为用户友好的中缀表示法。
 GQueue *comm_infix_to_postfix(const char *infix) {
     const GScannerConfig *config = _scanner_config_new();
     GScanner *scanner = g_scanner_new(config);
@@ -106,23 +106,29 @@ GQueue *comm_infix_to_postfix(const char *infix) {
     g_scanner_input_text(scanner, infix, strlen(infix));
     while (G_TOKEN_EOF != g_scanner_get_next_token(scanner)) {
         if (G_TOKEN_FLOAT == scanner->token) {
-            g_queue_push_head(res, t_expr_item_new(scanner->value.v_float));
+            //浮点数
+            g_queue_push_head(res, t_expr_item_new(G_TYPE_DOUBLE, scanner->value.v_float));
         } else if (G_TOKEN_IDENTIFIER == scanner->token) {
+            //字符串
+            // 操作符(
             if ('(' == scanner->value.v_identifier[0])
-                g_queue_push_head(ops, t_expr_item_new(G_TYPE_DOUBLE, scanner->value.v_identifier));
+                g_queue_push_head(ops, t_expr_item_new(G_TYPE_POINTER, scanner->value.v_identifier));
             else if (')' == scanner->value.v_identifier[0]) {
-                exp = g_queue_pop_head(ops);
-                if (exp->ifOp && '(' == exp->op[0]) {
-                    t_expr_item_free(exp);
-                    break;
+                // 结束符）
+                while (!g_queue_is_empty(ops)) {
+                    exp = g_queue_pop_head(ops);
+                    if (exp->ifOp && '(' == exp->op[0]) {
+                        t_expr_item_free(exp);
+                        break;
+                    }
                 }
                 g_queue_push_head(res, exp);
             } else if (comm_is_operator(scanner->value.v_identifier[0])) {
                 while (!g_queue_is_empty(ops)) {
-                    exp = g_queue_pop_head(ops);
+                    exp = g_queue_peek_head(ops);
                     if (exp->ifOp && common_precedence(exp->op[0]) < common_precedence(scanner->value.v_identifier[0]))
                         break;
-                    g_queue_push_head(res, ops);
+                    g_queue_push_head(res, g_queue_pop_head(ops));
                 }
                 g_queue_push_head(ops, t_expr_item_new(G_TYPE_DOUBLE, scanner->value.v_identifier));
             }
@@ -131,6 +137,7 @@ GQueue *comm_infix_to_postfix(const char *infix) {
     return res;
 }
 
+// postfix 转换为 infix 格式。
 double common_evaluate_postfix(GQueue *postfix) {
     GQueue *stack = g_queue_new();
     double val = 0;
@@ -162,18 +169,18 @@ double common_evaluate_postfix(GQueue *postfix) {
                         val = v1->value / v2->value;
                         break;
                     default:
-                        g_printf("%f ", exp->op[0]);
                         return 0;
                 }
-                g_queue_push_head(stack, t_expr_item_new(val));
+                g_queue_push_head(stack, t_expr_item_new(G_TYPE_DOUBLE, val));
                 t_expr_item_free(v1);
                 t_expr_item_free(v2);
             } else {
-                g_printf("%f ", exp->value);
                 return 0;
             }
         }
     }
+    printf("后缀表达式：%s=%f\n", buff, val);
+    g_queue_free_full(stack, (GDestroyNotify) t_expr_item_free);
     return val;
 }
 
@@ -220,25 +227,25 @@ void t_app_free(TApp *app) {
     g_free(app);
 }
 
-void app_btn_operator_click(GtkButton *btn, TApp *usd) {
+void app_btn_operator_click(GtkButton *btn, const TApp *usd) {
     const char *currText = gtk_editable_get_text(GTK_EDITABLE(usd->widgets[E_WIDGET_ENTER_INPUT]));
     char *newText = g_strdup_printf("%s%s", currText, gtk_button_get_label(btn));
     gtk_editable_set_text(GTK_EDITABLE(usd->widgets[E_WIDGET_ENTER_INPUT]), newText);
     g_free(newText);
 }
 
-void app_btn_equal_click(GtkButton *btn, TApp *usd) {
+void app_btn_equal_click(GtkButton *btn, const TApp *usd) {
     const char *currText = gtk_editable_get_text(GTK_EDITABLE(usd->widgets[E_WIDGET_ENTER_INPUT]));
     GQueue *postfix = comm_infix_to_postfix(currText);
-    double val = common_evaluate_postfix(postfix);
-    char *res = g_strdup_printf("%f", val);
-    gtk_label_set_text(GTK_LABEL(usd->widgets[E_WIDGET_LABEL_TEMP]), g_strdup_printf("%f", currText));
-    gtk_editable_set_text(GTK_EDITABLE(usd->widgets[E_WIDGET_ENTER_INPUT]), g_strdup_printf("%f", res));
+    const double val = common_evaluate_postfix(postfix);
+    char *res = g_strdup_printf("%g", val);
+    gtk_label_set_text(GTK_LABEL(usd->widgets[E_WIDGET_LABEL_TEMP]), currText);
+    gtk_editable_set_text(GTK_EDITABLE(usd->widgets[E_WIDGET_ENTER_INPUT]), res);
     g_queue_free_full(postfix, (GDestroyNotify) t_expr_item_free);
     g_free(res);
 }
 
-void app_btn_clean_click(GtkButton *btn, TApp *usd) {
+void app_btn_clean_click(GtkButton *btn, const TApp *usd) {
     gtk_editable_set_text(GTK_EDITABLE(usd->widgets[E_WIDGET_ENTER_INPUT]), "");
 }
 
