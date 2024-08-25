@@ -121,8 +121,8 @@ GQueue *comm_infix_to_postfix(const char *infix) {
                         t_expr_item_free(exp);
                         break;
                     }
+                    g_queue_push_head(res, exp);
                 }
-                g_queue_push_head(res, exp);
             } else if (comm_is_operator(scanner->value.v_identifier[0])) {
                 while (!g_queue_is_empty(ops)) {
                     exp = g_queue_peek_head(ops);
@@ -130,7 +130,7 @@ GQueue *comm_infix_to_postfix(const char *infix) {
                         break;
                     g_queue_push_head(res, g_queue_pop_head(ops));
                 }
-                g_queue_push_head(ops, t_expr_item_new(G_TYPE_DOUBLE, scanner->value.v_identifier));
+                g_queue_push_head(ops, t_expr_item_new(G_TYPE_POINTER, scanner->value.v_identifier));
             }
         }
     };
@@ -163,19 +163,18 @@ double common_evaluate_postfix(GQueue *postfix) {
             if (v1 && v2) {
                 switch (*exp->op) {
                     case '+':
-                        val = v1->value + v2->value;
+                        val = v2->value + v1->value;
                         break;
                     case '-':
-                        val = v1->value - v2->value;
+                        val = v2->value - v1->value;
                         break;
                     case '*':
-                        val = v1->value * v2->value;
+                        val = v2->value * v1->value;
                         break;
                     case '/':
-                        val = v1->value / v2->value;
+                        val = v2->value / v1->value;
                         break;
-                    default:
-                        return 0;
+                    default: break;
                 }
                 g_queue_push_head(stack, t_expr_item_new(G_TYPE_DOUBLE, val));
                 t_expr_item_free(v1);
@@ -185,7 +184,7 @@ double common_evaluate_postfix(GQueue *postfix) {
             }
         }
     }
-    printf("后缀表达式：%s=%f\n", buff, val);
+    printf("postfix：%s=%f\n", buff, val);
     g_queue_free_full(stack, (GDestroyNotify) t_expr_item_free);
     return val;
 }
@@ -247,9 +246,9 @@ void app_btn_equal_click(GtkButton *btn, const TApp *usd) {
     const char *currText = gtk_editable_get_text(GTK_EDITABLE(usd->widgets[E_WIDGET_ENTER_INPUT]));
     GQueue *postfix = comm_infix_to_postfix(currText);
     const double val = common_evaluate_postfix(postfix);
-    char *res = g_strdup_printf("%g", val);
-    gtk_label_set_text(GTK_LABEL(usd->widgets[E_WIDGET_LABEL_TEMP]), currText);
-    gtk_editable_set_text(GTK_EDITABLE(usd->widgets[E_WIDGET_ENTER_INPUT]), res);
+    char *res = g_strdup_printf("%s = %.0f", currText, val);
+    gtk_label_set_text(GTK_LABEL(usd->widgets[E_WIDGET_LABEL_TEMP]), res);
+    gtk_editable_set_text(GTK_EDITABLE(usd->widgets[E_WIDGET_ENTER_INPUT]), "");
     g_queue_free_full(postfix, (GDestroyNotify) t_expr_item_free);
     g_free(res);
 }
@@ -298,8 +297,8 @@ static void app_activate(GtkApplication *app, TApp *usd) {
     g_signal_connect(btn, "clicked", G_CALLBACK(app_btn_equal_click), usd);
 
     GtkWidget *window = gtk_application_window_new(app);
-    gtk_window_set_title(GTK_WINDOW(window), "计算机示例");
-    gtk_window_set_default_size(GTK_WINDOW(window), 800, 500);
+    gtk_window_set_title(GTK_WINDOW(window), "计算器示例");
+    gtk_window_set_default_size(GTK_WINDOW(window), 300, 500);
     gtk_window_set_child(GTK_WINDOW(window), grid);
     gtk_window_present(GTK_WINDOW(window));
 }
