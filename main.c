@@ -98,7 +98,7 @@ void _scanner_config_free(GScannerConfig *config) {
 };
 //将算术表达式从计算机友好的后缀表示法转换为用户友好的中缀表示法。
 GQueue *comm_infix_to_postfix(const char *infix) {
-    const GScannerConfig *config = _scanner_config_new();
+    GScannerConfig *config = _scanner_config_new();
     GScanner *scanner = g_scanner_new(config);
     //操作数和操作符
     GQueue *ops = g_queue_new(), *res = g_queue_new();
@@ -134,6 +134,12 @@ GQueue *comm_infix_to_postfix(const char *infix) {
             }
         }
     };
+    while (!g_queue_is_empty(ops)) {
+        g_queue_push_head(res, g_queue_pop_head(ops));
+    };
+    g_scanner_destroy(scanner);
+    g_queue_free_full(ops, (GDestroyNotify) t_expr_item_free);
+    _scanner_config_free(config);
     return res;
 }
 
@@ -211,6 +217,7 @@ typedef enum _EAppWidget {
 typedef struct _TApp {
     AdwApplication *app; //gtk应用程序实例
     GtkWidget **widgets; //所有小部件数组
+    GRegex *inputValidator;
 } TApp;
 
 TApp *t_app_new() {
@@ -218,11 +225,13 @@ TApp *t_app_new() {
     app->app = NULL;
     app->app = adw_application_new("com.github.linruohan", G_APPLICATION_DEFAULT_FLAGS);
     app->widgets = g_new0(GtkWidget*, E_WIDGET_CNT);
+    app->inputValidator = g_regex_new("^[\\d\\+\\-\\*/\\(\\)\\.]+$", G_REGEX_DEFAULT, G_REGEX_MATCH_DEFAULT, NULL);
     return app;
 };
 
 void t_app_free(TApp *app) {
     g_object_unref(app->app);
+    g_regex_unref(app->inputValidator);
     g_free(app->widgets);
     g_free(app);
 }
@@ -245,8 +254,16 @@ void app_btn_equal_click(GtkButton *btn, const TApp *usd) {
     g_free(res);
 }
 
+
 void app_btn_clean_click(GtkButton *btn, const TApp *usd) {
     gtk_editable_set_text(GTK_EDITABLE(usd->widgets[E_WIDGET_ENTER_INPUT]), "");
+}
+
+void input_callback(GtkEditable *entry, char *text, int len, int *pos, const TApp *usd) {
+    if (!g_regex_match(usd->inputValidator, text, G_REGEX_MATCH_DEFAULT,NULL)) {
+        g_signal_stop_emission_by_name(entry, "insert-text");
+        printf("%s 是无效输入\n", text);
+    }
 }
 
 static void app_activate(GtkApplication *app, TApp *usd) {
@@ -259,7 +276,8 @@ static void app_activate(GtkApplication *app, TApp *usd) {
 
     gtk_grid_set_column_homogeneous(GTK_GRID(grid), TRUE);
     gtk_grid_set_row_homogeneous(GTK_GRID(grid), TRUE);
-
+    g_signal_connect(gtk_editable_get_delegate(GTK_EDITABLE(entry)), "insert-text", G_CALLBACK(input_callback),
+                     usd);
     GtkWidget *btn;
     for (unsigned i = 0; i < DEF_BIN_LABEL_LEN; i++) {
         if (!DEF_BIN_LABELS[i]) continue;
