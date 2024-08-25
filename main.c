@@ -298,7 +298,7 @@ static void app_activate(GtkApplication *app, TApp *usd) {
 
     GtkWidget *window = gtk_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(window), "计算器示例");
-    gtk_window_set_default_size(GTK_WINDOW(window), 300, 500);
+    gtk_window_set_default_size(GTK_WINDOW(window), 500, 500);
     gtk_window_set_child(GTK_WINDOW(window), grid);
     gtk_window_present(GTK_WINDOW(window));
 }
